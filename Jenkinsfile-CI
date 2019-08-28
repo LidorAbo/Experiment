@@ -3,10 +3,12 @@ def Build_version
 def NextVersion
 def Current_version
 base_image_name="python:3"
-suffix_iimage_file = '.tar'
+suffix_image_file = '.tar'
 image_name = "python_image"
 docker_slave_node = 'docker-host'
 script_name = "Experiment.py"
+experiment_repo = 'Experiment.git'
+release_repo = 'Release.git'
 test_script_name = "ExperimentTests.py"
 folder_scripts= "scripts"
 pipeline_failure_indicator_string = 'FAILURE'
@@ -17,11 +19,15 @@ git_cred_id = 'git-cred'
 release_dir = 'Release'
 expiremnt_dir = 'Expirment'
 dev_branch =  '*/Dev'
-regex_version = '1.*'
 initial_version = '1.0.0'
 underscore = '_'
 dot = '.'
-windows_share_path = '/mnt/Artifacts'
+share_path = '/mnt/Artifacts'
+scm_url = 'https://github.com'
+dev_release_json_file = 'Dev.json'
+version_key_row_json = '6'
+ip_key_row_json  = '5'
+regex_key_value_json = '("[a-zA-Z]+")\\s+:\\s+("[a-zA-Z0-9\\._]+")'
 pipeline {
     options {
         timeout(8)
@@ -34,40 +40,45 @@ pipeline {
 
             steps {
                 script {
-                    dir(release_dir){
-                        checkout([$class: 'GitSCM', branches: [[name: dev_branch]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: git_cred_id, url: 'https://github.com/LidorAbo/Release.git']]])
-                    }
-                    dir(expiremnt_dir){
-                            checkout([$class: 'GitSCM', branches: [[name: dev_branch]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: git_cred_id, url: 'https://github.com/LidorAbo/Experiment.git']]])
+                    withCredentials([usernamePassword(credentialsId: git_cred_id, passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
+                        dir(release_dir) {
+                            deleteDir()
+                            checkout([$class: 'GitSCM', branches: [[name: dev_branch]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: git_cred_id, url: "$scm_url/$GIT_USERNAME/$release_repo"]]])
+
+                        }
+                        dir(expiremnt_dir) {
+                            deleteDir()
+                            checkout([$class: 'GitSCM', branches: [[name: dev_branch]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: git_cred_id, url: "$scm_url/$GIT_USERNAME/$experiment_repo"]]])
                             result = sh(script: 'git branch -r | grep -q 1.*', returnStatus: true)
                             if (!result)
-                                Current_version = sh(script: "git branch -r | sed 's/[^0-9\\.]*//g' | sort -r | head -n 1")
+                                Current_version = sh(script: "git branch -r | sed 's/[^0-9\\.]*//g' | sort -r | head -n 1", returnStdout: true).trim()
                             else
                                 Current_version = initial_version
                             Commit_Id = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
                             Build_version = Current_version + underscore + Commit_Id
                             println("Checking the build version: $Build_version")
-                            last_digit_current_version=sh(script: "echo $Current_version | cut -d$dot -f3", returnStdout: true ).trim()
+                            last_digit_current_version = sh(script: "echo $Current_version | cut -d$dot -f3", returnStdout: true).trim()
                             NextVersion = sh(script: "echo $Current_version | cut -d$dot -f1", returnStdout: true).trim() + dot + sh(script: "echo $Current_version |cut -d$dot -f2", returnStdout: true).trim() + dot + (Integer.parseInt(last_digit_current_version) + 1)
 
 
-
+                        }
                     }
-
                 }
             }
+
+
         }
-        stage('UT'){
-            steps{
-                script{
+        stage('UT') {
+            steps {
+                script {
                     sh "echo Checking the build version: $Build_version"
-                    dir("./$folder_scripts"){
+                    dir("./$folder_scripts") {
                         try {
                             sh "$module $test_script_name"
                         }
-                        catch (exception){
+                        catch (exception) {
                             println "The test is failed"
-                            currentBuild.result =  pipeline_failure_indicator_string
+                            currentBuild.result = pipeline_failure_indicator_string
                             throw exception
                         }
                     }
@@ -75,20 +86,20 @@ pipeline {
                 }
             }
         }
-        stage('Build docker image'){
-            steps{
-                script{
-                        archive_name = 'archive'
-                        sh "echo $workspace"
-                        dir(workspace){
-                            stash includes: "$docker_file_name,**/$folder_scripts/*", name: archive_name
+        stage('Build docker image') {
+            steps {
+                script {
+                    archive_name = 'archive'
+                    sh "echo $workspace"
+                    dir(workspace) {
+                        stash includes: "$docker_file_name,**/$folder_scripts/*", name: archive_name
+                    }
+                    node(docker_slave_node) {
+                        try {
+                            unstash archive_name
+                            sh "docker build --build-arg script_name=$script_name --build-arg test_script_name=$test_script_name --build-arg folder_scripts=$folder_scripts --build-arg module=$module --build-arg image_name=$base_image_name . -t $image_name:$Build_version>/dev/null"
                         }
-                    node(docker_slave_node){
-                        try{
-                             unstash archive_name
-                             sh "docker build --build-arg script_name=$script_name --build-arg test_script_name=$test_script_name --build-arg folder_scripts=$folder_scripts --build-arg module=$module --build-arg image_name=$base_image_name . -t $image_name:$Build_version"
-                        }
-                        catch (exception){
+                        catch (exception) {
                             println "The image build is failed"
                             currentBuild.result = pipeline_failure_indicator_string
                             throw exception
@@ -98,21 +109,21 @@ pipeline {
                 }
             }
         }
-        stage('Testing running image in container'){
-            steps{
-                script{
+        stage('Testing running image in container') {
+            steps {
+                script {
                     remove_image_command = 'docker rmi -f $(sudo docker images | grep python | awk \'{print $3}\')'
                     error_message_running_container = "The result of running container is incorrect"
-                    node(docker_slave_node){
-                        try{
+                    node(docker_slave_node) {
+                        try {
                             result = sh(script: "docker run --rm --name $image_name $image_name:$Build_version", returnStdout: true).trim()
-                            if (result != string_to_check){
+                            if (result != string_to_check) {
                                 sh label: '', script: remove_image_command
                                 currentBuild.result = pipeline_failure_indicator_string
                                 throw new Exception(error_message_running_container)
                             }
                         }
-                        catch (exception){
+                        catch (exception) {
                             sh label: '', script: remove_image_command
                             currentBuild.result = pipeline_failure_indicator_string
                             throw new Exception(error_message_running_container)
@@ -121,22 +132,22 @@ pipeline {
                 }
             }
         }
-        stage('Save image in remote share in windows host'){
-            steps{
-                script{
+        stage('Save image in remote share in windows or linux host') {
+            steps {
+                script {
                     node(docker_slave_node) {
                         try {
-                                sh """
-                                   ls
-                                   cd $windows_share_path
-                                   rm -rf $NextVersion
-                                   mkdir $NextVersion
-                                   cd $NextVersion
-                                   docker save -o $image_name$suffix_iimage_file $image_name
+                            sh """
+                                   mkdir -p $share_path/$NextVersion
+                                   docker tag $image_name:$Build_version $image_name:$NextVersion
+                                   docker save -o $share_path/$NextVersion/$image_name$suffix_image_file $image_name:$NextVersion
+                                   chown -R 1000:1000 $share_path/$NextVersion
+                                   md5sum $share_path/$NextVersion/$image_name$suffix_image_file > $share_path/$NextVersion/hash 
+                                   
                                 """
-                                sh(script: "$remove_image_command")
+                            sh(script: "$remove_image_command")
                         }
-                        catch (exception){
+                        catch (exception) {
                             println(exception)
                             println "The image upload is failed"
                             sh(script: "$remove_image_command")
@@ -148,36 +159,64 @@ pipeline {
                 }
             }
         }
-//        stage('Push tag to the repository'){
-//            when{
-//                expression { dockerize_string in list_of_choices }
-//            }
-//            steps{
-//                script{
-//                    withCredentials([usernamePassword(credentialsId: git_cred_id , passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
-//                        try{
-//                            sh """
-//                         git config --global user.name "LidorAbo"
-//                         git config --global user.email "Lidorabo2@gmail.com"
-//                         git tag -a $NextVersion -m "Tag for release version of python module"
-//                         git push  https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/DevOpsINT/Course.git $NextVersion
-//                            """
-//                        }
-//                        catch (exception){
-//                            println "Pushing tag to git is failed"
-//                            currentBuild.result = pipeline_failure_indicator_string
-//                            throw exception
-//                        }
-//
-//                    }
-//                }
-//            }
-//
-        stage('Cleanup') {
+        stage('Create version branch and Change version in dev.json in Dev branch in Release rep') {
             steps {
-                deleteDir()
-            }
+                script {
+                    withCredentials([usernamePassword(credentialsId: git_cred_id, passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
+                        try {
+                            dir(expiremnt_dir) {
+                                deleteDir()
+                                sh """
 
+                                        git branch -D $NextVersion 2>/dev/null || true
+                                        git checkout -b $NextVersion
+                                        git config --global user.name "$GIT_USERNAME"
+                                        git config --global user.email "Lidorabo2@gmail.com"
+                                        git push https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/${GIT_USERNAME}/$experiment_repo 
+                                   """
+                            }
+                        }
+                        catch (exception) {
+                            println "Creating version branch is failed"
+                            currentBuild.result = pipeline_failure_indicator_string
+                            throw exception
+                        }
+                        dir(release_dir){
+                            def ip = input(
+                                    id: 'userInput', message: 'Enter Host info to deploy checked module:', ok: 'Continue', cancel: 'Cancel',
+                                    parameters: [
+
+                                            string(defaultValue: '192.168.1.3',
+                                                    description: 'Remote host private ip',
+                                                    name: 'private_ip')
+                                    ])
+                                    try {
+                                        sh(script: "mv ${dev_release_json_file + dot + 'failed'} $dev_release_json_file 2>/dev/null", returnStatus: true)
+                                        sh """
+                                        sed -i -r '$version_key_row_json's'/$regex_key_value_json/\\1 : "$NextVersion"/' $dev_release_json_file
+                                        sed -i -r '$ip_key_row_json's'/$regex_key_value_json/\\1 : "$ip"/' $dev_release_json_file
+                                        git add $dot
+                                        git config --global user.name "$GIT_USERNAME"
+                                        git config --global user.email "Lidorabo2@gmail.com"
+                                        git commit -m "CI approved"
+                                        git push  https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/${GIT_USERNAME}/$release_repo HEAD:${dev_branch.split('/')[1]}
+                                        """
+                                    }
+                                    catch (exception){
+                                        println "Change version in $dev_release_json_file file is failed"
+                                        currentBuild.result = pipeline_failure_indicator_string
+                                        throw exception
+                                    }
+                        }
+                    }
+                }
+            }
+        }
+        stage('Cleanup') {
+                steps {
+                    deleteDir()
+                }
+
+            }
         }
     }
-}
