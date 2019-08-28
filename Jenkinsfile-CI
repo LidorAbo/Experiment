@@ -90,29 +90,29 @@ pipeline {
                 }
             }
         }
-//        stage('Testing running image in container'){
-//            steps{
-//                script{
-//                    remove_image_command = 'docker rmi -f $(sudo docker images | grep python | awk \'{print $3}\')'
-//                    error_message_running_container = "The result of running container is incorrect"
-//                    node(docker_slave_node){
-//                        try{
-//                            result = sh(script: "docker run --rm --name $image_name $image_name:$Build_version", returnStdout: true).trim()
-//                            if (result != string_to_check){
-//                                sh label: '', script: remove_image_command
-//                                currentBuild.result = pipeline_failure_indicator_string
-//                                throw new Exception(error_message_running_container)
-//                            }
-//                        }
-//                        catch (exception){
-//                            sh label: '', script: remove_image_command
-//                            currentBuild.result = pipeline_failure_indicator_string
-//                            throw new Exception(error_message_running_container)
-//                        }
-//                    }
-//                }
-//            }
-//        }
+        stage('Testing running image in container'){
+            steps{
+                script{
+                    remove_image_command = 'docker rmi -f $(sudo docker images | grep python | awk \'{print $3}\')'
+                    error_message_running_container = "The result of running container is incorrect"
+                    node(docker_slave_node){
+                        try{
+                            result = sh(script: "docker run --rm --name $image_name $image_name:$Build_version", returnStdout: true).trim()
+                            if (result != string_to_check){
+                                sh label: '', script: remove_image_command
+                                currentBuild.result = pipeline_failure_indicator_string
+                                throw new Exception(error_message_running_container)
+                            }
+                        }
+                        catch (exception){
+                            sh label: '', script: remove_image_command
+                            currentBuild.result = pipeline_failure_indicator_string
+                            throw new Exception(error_message_running_container)
+                        }
+                    }
+                }
+            }
+        }
 //        stage('Push image to the Dockerhub'){
 //            when{
 //                expression { dockerize_string in list_of_choices }
