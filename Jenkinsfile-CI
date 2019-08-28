@@ -2,6 +2,8 @@ def Commit_Id
 def Build_version
 def NextVersion
 def Current_version
+base_image_name="python:3"
+image_name = "python_image"
 docker_slave_node = 'docker-host'
 script_name = "Experiment.py"
 test_script_name = "ExperimentTests.py"
@@ -12,7 +14,7 @@ docker_file_name = 'Dockerfile'
 string_to_check = "Hello world!"
 git_cred_id = 'git-cred'
 release_dir = 'Release'
-expiremnt_dir = 'Expirmet'
+expiremnt_dir = 'Expirment'
 dev_branch =  '*/Dev'
 regex_version = '1.*'
 initial_version = '1.0.0'
@@ -65,44 +67,37 @@ pipeline {
                 }
             }
         }
-//        stage('Build docker image'){
-//
-//            when{
-//                expression { dockerize_string in list_of_choices }
-//            }
-//            steps{
-//                script{
-//                    archive_name = 'archive'
-//                        sh "echo $workspace"
-//                        dir(workspace){
-//                            stash includes: "$docker_file_name,**/$folder_scripts/*", name: archive_name
-//                        }
-//                    node(docker_slave_node){
-//                        try{
-//                             unstash archive_name
-//                             sh "sudo docker build --build-arg script_name=$script_name --build-arg test_script_name=$test_script_name --build-arg folder_scripts=$folder_scripts --build-arg module=$module --build-arg image_name=$base_image_name . -t $image_name:$Build_version"
-//                        }
-//                        catch (exception){
-//                            println "The image build is failed"
-//                            currentBuild.result = pipeline_failure_indicator_string
-//                            throw exception
-//                        }
-//
-//                    }
-//                }
-//            }
-//        }
+        stage('Build docker image'){
+            steps{
+                script{
+                        archive_name = 'archive'
+                        sh "echo $workspace"
+                        dir(workspace){
+                            stash includes: "$docker_file_name,**/$folder_scripts/*", name: archive_name
+                        }
+                    node(docker_slave_node){
+                        try{
+                             unstash archive_name
+                             sh "docker build --build-arg script_name=$script_name --build-arg test_script_name=$test_script_name --build-arg folder_scripts=$folder_scripts --build-arg module=$module --build-arg image_name=$base_image_name . -t $image_name:$Build_version"
+                        }
+                        catch (exception){
+                            println "The image build is failed"
+                            currentBuild.result = pipeline_failure_indicator_string
+                            throw exception
+                        }
+
+                    }
+                }
+            }
+        }
 //        stage('Testing running image in container'){
-//            when{
-//                expression { dockerize_string in list_of_choices }
-//            }
 //            steps{
 //                script{
-//                    remove_image_command = 'sudo docker rmi -f $(sudo docker images | grep python | awk \'{print $3}\')'
+//                    remove_image_command = 'docker rmi -f $(sudo docker images | grep python | awk \'{print $3}\')'
 //                    error_message_running_container = "The result of running container is incorrect"
 //                    node(docker_slave_node){
 //                        try{
-//                            result = sh(script: "sudo docker run --rm --name $image_name $image_name:$Build_version", returnStdout: true).trim()
+//                            result = sh(script: "docker run --rm --name $image_name $image_name:$Build_version", returnStdout: true).trim()
 //                            if (result != string_to_check){
 //                                sh label: '', script: remove_image_command
 //                                currentBuild.result = pipeline_failure_indicator_string
