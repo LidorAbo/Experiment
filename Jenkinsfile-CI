@@ -47,66 +47,24 @@ pipeline {
                 }
             }
         }
-//        stage('Input') {
-//            steps {
-//                script {
-//                    show_dir_content_command = "ls ./ansible/roles"
-//                    change_first_char_word_command = "sed -E \'s/./\\u&/\'"
-//                    choices = input(
-//                            id: 'userInput', message: 'Choose options:', ok: 'Ok', cancel: 'Cancel',
-//                            parameters: [
-//                                    booleanParam(defaultValue: false, name: sh(script: "$show_dir_content_command | awk NR==${counter++} | $change_first_char_word_command", returnStdout: true).trim()),
-//                                    booleanParam(defaultValue: false, name: sh(script: "$show_dir_content_command | awk NR==${counter++} | $change_first_char_word_command", returnStdout: true).trim()),
-//                                    booleanParam(defaultValue: false, name: sh(script: "$show_dir_content_command | awk NR==${counter++} | $change_first_char_word_command", returnStdout: true).trim()),
-//                                    booleanParam(defaultValue: false, name: sh(script: "$show_dir_content_command | awk NR==${counter++} | $change_first_char_word_command", returnStdout: true).trim()),
-//                                    booleanParam(defaultValue: false, name: sh(script: "$show_dir_content_command | awk NR==${counter++} | $change_first_char_word_command", returnStdout: true).trim())
-//
-//                            ])
-//                    for (entry in choices) {
-//                        if (entry.value == true) {
-//                            list_of_choices.add(entry.key.toLowerCase())
-//                        }
-//                    }
-//                    list_of_choices.sort()
-//                    dir(folder_for_run_playbook) {
-//
-//                        sh "cp $hosts_file_name ${hosts_file_name}.bak"
-//                        for (value in list_of_choices) {
-//                            def ip = input(
-//                                    id: 'userInput', message: 'Enter Host info for installing\n ' + value, ok: 'Ok',
-//                                    parameters: [
-//
-//                                            string(defaultValue: '192.168.1.3',
-//                                                    name: 'private_ip'),
-//                                    ])
-//                            sh "sed -i 's/\\$template_ip$value\\>/$ip/' $hosts_file_name"
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//        stage('UT'){
-//
-//            when{
-//                expression { dockerize_string in list_of_choices }
-//            }
-//            steps{
-//                script{
-//                    sh "echo Checking the build version: $Build_version"
-//                    dir("./$folder_scripts"){
-//                        try {
-//                            sh "$module $test_script_name"
-//                        }
-//                        catch (exception){
-//                            println "The test is failed"
-//                            currentBuild.result =  pipeline_failure_indicator_string
-//                            throw exception
-//                        }
-//                    }
-//
-//                }
-//            }
-//        }
+        stage('UT'){
+            steps{
+                script{
+                    sh "echo Checking the build version: $Build_version"
+                    dir("./$folder_scripts"){
+                        try {
+                            sh "$module $test_script_name"
+                        }
+                        catch (exception){
+                            println "The test is failed"
+                            currentBuild.result =  pipeline_failure_indicator_string
+                            throw exception
+                        }
+                    }
+
+                }
+            }
+        }
 //        stage('Build docker image'){
 //
 //            when{
