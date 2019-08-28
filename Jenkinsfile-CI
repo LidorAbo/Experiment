@@ -3,6 +3,7 @@ def Build_version
 def NextVersion
 def Current_version
 base_image_name="python:3"
+suffix_iimage_file = '.tar'
 image_name = "python_image"
 docker_slave_node = 'docker-host'
 script_name = "Experiment.py"
@@ -19,6 +20,8 @@ dev_branch =  '*/Dev'
 regex_version = '1.*'
 initial_version = '1.0.0'
 underscore = '_'
+dot = '.'
+windows_share_path = '/mnt/Artifacts'
 pipeline {
     options {
         timeout(8)
@@ -44,6 +47,11 @@ pipeline {
                             Commit_Id = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
                             Build_version = Current_version + underscore + Commit_Id
                             println("Checking the build version: $Build_version")
+                            last_digit_current_version=sh(script: "echo $Current_version | cut -d$dot -f3", returnStdout: true ).trim()
+                            NextVersion = sh(script: "echo $Current_version | cut -d$dot -f1", returnStdout: true).trim() + dot + sh(script: "echo $Current_version |cut -d$dot -f2", returnStdout: true).trim() + dot + (Integer.parseInt(last_digit_current_version) + 1)
+
+
+
                     }
 
                 }
@@ -113,33 +121,33 @@ pipeline {
                 }
             }
         }
-//        stage('Push image to the Dockerhub'){
-//            when{
-//                expression { dockerize_string in list_of_choices }
-//            }
-//            steps{
-//                script{
-//                    node(docker_slave_node) {
-//                        try {
-//                            withCredentials([usernamePassword(credentialsId: docker_hub_jenkins_cred_id, passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
-//                                sh "sudo docker login -u=${DOCKER_USERNAME} -p=${DOCKER_PASSWORD}"
-//                                sh "sudo docker tag $image_name:$Build_version $docker_hub_repo:${image_name + underscore +Build_version}"
-//                                sh "sudo docker push $docker_hub_repo:${image_name + underscore + Build_version}"
-//                                sh(script: "$remove_image_command")
-//
-//                            }
-//                        }
-//                        catch (exception){
-//                            println "The image upload is failed"
-//                            sh(script: "$remove_image_command")
-//                            currentBuild.result = pipeline_failure_indicator_string
-//                            throw exception
-//                        }
-//
-//                    }
-//                }
-//            }
-//        }
+        stage('Save image in remote share in windows host'){
+            steps{
+                script{
+                    node(docker_slave_node) {
+                        try {
+                                sh """
+                                   ls
+                                   cd $windows_share_path
+                                   rm -rf $NextVersion
+                                   mkdir $NextVersion
+                                   cd $NextVersion
+                                   docker save -o $image_name$suffix_iimage_file $image_name
+                                """
+                                sh(script: "$remove_image_command")
+                        }
+                        catch (exception){
+                            println(exception)
+                            println "The image upload is failed"
+                            sh(script: "$remove_image_command")
+                            currentBuild.result = pipeline_failure_indicator_string
+                            throw exception
+                        }
+
+                    }
+                }
+            }
+        }
 //        stage('Push tag to the repository'){
 //            when{
 //                expression { dockerize_string in list_of_choices }
